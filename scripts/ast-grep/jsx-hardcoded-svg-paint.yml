@@ -1,0 +1,113 @@
+# Hardcoded SVG paint in TSX — theme-token migration helpers.
+#
+# Codemod Grep (YAML mode): paste the first document only (above the first ---).
+# Prefer path filter prefix `src/` and language from the YAML (`tsx`).
+# Local ast-grep: `sg scan -r scripts/ast-grep/jsx-hardcoded-svg-paint.yml`
+#
+# Matches:
+#   - fill|stroke|color string literals (hex / rgb(a) / hsl(a) / named colors)
+#   - fill|stroke attributes that are not currentColor|none|transparent|inherit|var(|url(
+#   - style={{ fill|stroke: ... }} pairs
+# Ignores tokenized paint: currentColor, none, transparent, inherit, var(, url(.
+# Does not cover .svg assets (use regex mode for those).
+
+id: jsx-hardcoded-svg-paint
+language: tsx
+message: Hardcoded SVG paint; migrate to a theme token or currentColor + text class.
+rule:
+  any:
+    # Literal fill | stroke | color (attribute or nested expression string)
+    - kind: jsx_attribute
+      all:
+        - has:
+            kind: property_identifier
+            regex: "^(fill|stroke|color)$"
+        - has:
+            stopBy: end
+            kind: string
+            regex: "(?i)(#[0-9a-f]{3,8}\\b|\\b(rgb|rgba|hsl|hsla)\\s*\\(|\\b(white|black|red|blue|green|gray|grey|orange|yellow|purple|pink)\\b)"
+            not:
+              regex: "(?i)(var\\s*\\(|currentcolor|\\bnone\\b|\\btransparent\\b|\\binherit\\b)"
+
+    # fill | stroke attribute that is not already tokenized / cleared
+    - kind: jsx_attribute
+      all:
+        - has:
+            kind: property_identifier
+            regex: "^(fill|stroke)$"
+        - not:
+            regex: "(?i)(currentcolor|\\bnone\\b|\\btransparent\\b|\\binherit\\b|var\\s*\\(|url\\s*\\()"
+
+    # style={{ fill|stroke: ... }}
+    - kind: pair
+      has:
+        kind: property_identifier
+        regex: "^(fill|stroke)$"
+      inside:
+        stopBy: end
+        kind: jsx_attribute
+        has:
+          kind: property_identifier
+          regex: "^style$"
+
+---
+id: jsx-paint-literal
+language: tsx
+message: Literal fill|stroke|color string; prefer var(--oh-…) or currentColor + text token class.
+rule:
+  kind: jsx_attribute
+  all:
+    - has:
+        kind: property_identifier
+        regex: "^(fill|stroke|color)$"
+    - has:
+        stopBy: end
+        kind: string
+        regex: "(?i)(#[0-9a-f]{3,8}\\b|\\b(rgb|rgba|hsl|hsla)\\s*\\(|\\b(white|black|red|blue|green|gray|grey|orange|yellow|purple|pink)\\b)"
+        not:
+          regex: "(?i)(var\\s*\\(|currentcolor|\\bnone\\b|\\btransparent\\b|\\binherit\\b)"
+
+---
+id: jsx-fill-stroke-not-token
+language: tsx
+message: fill|stroke is not currentColor/none/transparent/inherit/var()/url(); migrate to a theme token.
+rule:
+  kind: jsx_attribute
+  all:
+    - has:
+        kind: property_identifier
+        regex: "^(fill|stroke)$"
+    - not:
+        regex: "(?i)(currentcolor|\\bnone\\b|\\btransparent\\b|\\binherit\\b|var\\s*\\(|url\\s*\\()"
+
+---
+id: jsx-style-fill-or-stroke
+language: tsx
+message: style object sets SVG fill or stroke; prefer a theme token or CSS variable.
+rule:
+  kind: pair
+  has:
+    kind: property_identifier
+    regex: "^(fill|stroke)$"
+  inside:
+    stopBy: end
+    kind: jsx_attribute
+    has:
+      kind: property_identifier
+      regex: "^style$"
+
+---
+# Narrower hex-only subset of jsx-paint-literal (optional focused scan).
+id: jsx-color-prop-hex
+language: tsx
+message: Hex color on fill|stroke|color; migrate to a theme token.
+rule:
+  kind: jsx_attribute
+  all:
+    - has:
+        kind: property_identifier
+        regex: "^(fill|stroke|color)$"
+    - has:
+        stopBy: end
+        kind: string
+        regex: "#[0-9A-Fa-f]{3,8}"
